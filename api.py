@@ -2,18 +2,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import stripe
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 app = FastAPI()
 
-# Set Stripe API key from Railway's environment variable
-stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+# Hardcoding the Stripe API Key for testing
+stripe.api_key = "sk_test_51Q8DYpDAl5kM5RlQRtctUU9lIwApbNbLb5aNbEDTL8XKwNVEZgyEsZiote3nQFC89Zqob8aulTg3YtG3WgG8aQU100AKgfe0Ty"  # Replace this with your actual test API key
 
-# Verify the key is loaded for debugging (remove this after testing)
-if not stripe.api_key:
-    print("Stripe API key not loaded! Check Railway environment variables.")
-else:
-    print(f"Stripe API Key Loaded: {stripe.api_key[:8]}...")  # Logs partial key for security
+# Debugging: Verify that the key is loaded
+print(f"Stripe API Key Loaded: {stripe.api_key[:8]}...")  # Logs partial key for security
 
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
