@@ -7,7 +7,7 @@ import os
 app = FastAPI()
 
 # Set Stripe API key from Railway's environment variable
-stripe.api_key = os.environ("STRIPE_SECRET_KEY")
+stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 # Verify the key is loaded for debugging (remove this after testing)
 if not stripe.api_key:
