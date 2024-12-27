@@ -2,15 +2,18 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import stripe
 from fastapi.middleware.cors import CORSMiddleware
-import os 
-from dotenv import load_dotenv
-
-load_dotenv()  # Load environment variables from.env file
+import os
 
 app = FastAPI()
 
-# Your Stripe secret key
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Replace with your actual secret key
+# Set Stripe API key from Railway's environment variable
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+# Verify the key is loaded for debugging (remove this after testing)
+if not stripe.api_key:
+    print("Stripe API key not loaded! Check Railway environment variables.")
+else:
+    print(f"Stripe API Key Loaded: {stripe.api_key[:8]}...")  # Logs partial key for security
 
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
@@ -37,8 +40,8 @@ async def create_checkout_session(request: CheckoutRequest):
                 'quantity': 1,
             }],
             mode='payment',
-            success_url="https://your-domain.com/success",
-            cancel_url="https://your-domain.com/cancel",
+            success_url="https://terroraudiopayment-production.up.railway.app/success",
+            cancel_url="https://terroraudiopayment-production.up.railway.app/cancel",
         )
         print(f"Checkout session created: {session}")  # Log session data for debugging
         return {"checkout_url": session.url}
@@ -49,4 +52,3 @@ async def create_checkout_session(request: CheckoutRequest):
 @app.get("/")
 def welcome_spot():
     return {"message": "Welcome to TerrorAudio"}
-    
