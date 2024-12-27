@@ -45,3 +45,8 @@ async def create_checkout_session(request: CheckoutRequest):
     except Exception as e:
         print(f"Error: {str(e)}")  # Log the error message
         raise HTTPException(status_code=400, detail=str(e))
+    
+    app.get("/")
+    def welcome_spot():
+        return {"message": "Welcome to TerrorAudio"}
+    
