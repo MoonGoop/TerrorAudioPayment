@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
 # Hardcoding the Stripe API Key for testing
-stripe.api_key = "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"  # Replace this with your actual test API key
+stripe.api_key = "STRIPE_SECRET_KEY"  # Replace this with your actual test API key
 
 # Debugging: Verify that the key is loaded
 print(f"Stripe API Key Loaded: {stripe.api_key[:8]}...")  # Logs partial key for security
