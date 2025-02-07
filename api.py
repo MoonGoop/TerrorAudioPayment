@@ -2,11 +2,12 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import stripe
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 app = FastAPI()
 
 # Hardcoding the Stripe API Key for testing
-stripe.api_key = "STRIPE_SECRET_KEY"  # Replace this with your actual test API key
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Replace this with your actual test API key
 
 # Debugging: Verify that the key is loaded
 print(f"Stripe API Key Loaded: {stripe.api_key[:8]}...")  # Logs partial key for security
