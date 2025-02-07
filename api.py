@@ -15,7 +15,7 @@ print(f"Stripe API Key Loaded: {stripe.api_key[:8]}...")  # Logs partial key for
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://terroraudio.com"],  # Adjust with the domain where your frontend is hosted
+    allow_origins=["https://terroraudio.com", "https://www.terroraudio.com"],  # ✅ Allow both with and without 'www'
     allow_credentials=True,
     allow_methods=["OPTIONS", "GET", "POST"],
     allow_headers=["*"],
