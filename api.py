@@ -38,7 +38,7 @@ async def create_checkout_session(request: CheckoutRequest):
             }],
             mode='payment',
             success_url="https://terroraudio.com/success-page",
-            cancel_url="https://terroraudiopayment-production.up.railway.app/cancel",
+            cancel_url="https://terroraudio.com/error-page",
         )
         print(f"Checkout session created: {session}")  # Log session data for debugging
         return {"checkout_url": session.url}
