@@ -4,6 +4,7 @@ import stripe
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
+#terror audio
 app = FastAPI()
 
 # Hardcoding the Stripe API Key for testing
