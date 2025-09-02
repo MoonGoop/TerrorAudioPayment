@@ -3,8 +3,9 @@ import logging
 from typing import Optional, Set
 
 import stripe
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Request, Query, Body
 from fastapi.responses import JSONResponse, Response, RedirectResponse
+from pydantic import BaseModel, Field, validator
 
 # ─────────────────────────────────────────────────────────
 # Config
@@ -13,10 +14,12 @@ STRIPE_SECRET_KEY: Optional[str] = os.getenv("STRIPE_SECRET_KEY")
 SUCCESS_URL: str = os.getenv("SUCCESS_URL", "https://terroraudio.com/success-page")
 CANCEL_URL: str = os.getenv("CANCEL_URL", "https://terroraudio.com")
 
+# CORS allowlist (comma-separated)
 ALLOW_ORIGINS_ENV = os.getenv(
     "ALLOW_ORIGINS",
     "https://terroraudio.com,https://www.terroraudio.com"
 )
+# TEMP: set ALLOW_ALL_CORS=1 to open during testing
 ALLOW_ALL_CORS = os.getenv("ALLOW_ALL_CORS", "0") == "1"
 
 def _normalize(origins: str) -> Set[str]:
@@ -38,7 +41,7 @@ else:
     log.info(f"Stripe key loaded (prefix): {STRIPE_SECRET_KEY[:8]}••••")
 
 # ─────────────────────────────────────────────────────────
-# Dynamic CORS (works for preflight + errors)
+# Dynamic CORS (handles preflight and adds headers to ALL responses)
 # ─────────────────────────────────────────────────────────
 def origin_allowed(origin: Optional[str]) -> bool:
     if not origin:
@@ -55,7 +58,7 @@ def cors_headers(origin: Optional[str], req_headers: Optional[str]) -> dict:
         "Access-Control-Allow-Headers": req_headers or "*",
     }
     if origin_allowed(origin):
-        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Origin"] = origin  # echo exact origin
         headers["Access-Control-Allow-Credentials"] = "true"
     return headers
 
@@ -64,15 +67,18 @@ async def dynamic_cors(request: Request, call_next):
     origin = request.headers.get("origin")
     req_ac_req_headers = request.headers.get("access-control-request-headers")
 
+    # Preflight
     if request.method == "OPTIONS":
         return Response(status_code=204, headers=cors_headers(origin, req_ac_req_headers))
 
+    # Main path (ensure errors also carry CORS)
     try:
         response = await call_next(request)
     except Exception:
         log.exception("Unhandled server error")
         response = JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
+    # Attach CORS headers
     for k, v in cors_headers(origin, req_ac_req_headers).items():
         if k == "Vary" and "Vary" in response.headers:
             if v not in response.headers["Vary"]:
@@ -80,6 +86,17 @@ async def dynamic_cors(request: Request, call_next):
         else:
             response.headers[k] = v
     return response
+
+# ─────────────────────────────────────────────────────────
+# Models
+# ─────────────────────────────────────────────────────────
+class CheckoutRequest(BaseModel):
+    price_id: str = Field(..., description="Stripe Price ID (e.g., price_123...)")
+    @validator("price_id")
+    def _valid(cls, v):
+        if not isinstance(v, str) or not v:
+            raise ValueError("price_id is required")
+        return v
 
 # ─────────────────────────────────────────────────────────
 # Helpers
@@ -113,38 +130,27 @@ def _create_session(price_id: str) -> str:
 def welcome_spot():
     return {"message": "Welcome to TerrorAudio"}
 
-from pydantic import BaseModel, Field, validator
-from fastapi import Body
+# POST (no trailing slash)
+@app.post("/create-checkout-session")
+def create_checkout_session(payload: CheckoutRequest = Body(...)):
+    log.info(f"Create checkout request: {payload.dict()}")
+    checkout_url = _create_session(payload.price_id)
+    log.info(f"Checkout session URL: {checkout_url}")
+    return {
+        "success": True,
+        "url": checkout_url,           # frontend commonly expects this
+        "checkout_url": checkout_url   # backward compatibility
+    }
 
-class CheckoutRequest(BaseModel):
-    price_id: str = Field(..., description="Stripe Price ID (e.g., price_123...)")
-    @validator("price_id")
-    def _valid(cls, v):
-        if not isinstance(v, str) or not v:
-            raise ValueError("price_id is required")
-        return v
+# POST (trailing slash) to avoid 308 traps
+@app.post("/create-checkout-session/")
+def create_checkout_session_slash(payload: CheckoutRequest = Body(...)):
+    return create_checkout_session(payload)
 
-# Provide both variants to avoid 308s
-CREATE_PATHS = ["/create-checkout-session", "/create-checkout-session/"]
-
-for path in CREATE_PATHS:
-    @app.post(path)
-    def create_checkout_session(payload: CheckoutRequest = Body(...)):
-        log.info(f"Create checkout request: {payload.dict()}")
-        checkout_url = _create_session(payload.price_id)
-        log.info(f"Checkout session URL: {checkout_url}")
-        # ✅ Return multiple keys so any frontend expectation passes
-        return {
-            "success": True,
-            "url": checkout_url,
-            "checkout_url": checkout_url
-        }
-
-# Pure redirect endpoint (useful if you can link to it directly)
+# Pure redirect endpoint (use as a normal link)
 @app.get("/redirect-checkout-session")
 def redirect_checkout_session(price_id: str = Query(..., description="Stripe Price ID")):
     url = _create_session(price_id)
-    # 303 ensures browser navigates even if original request was POST elsewhere
     return RedirectResponse(url=url, status_code=303)
 
 # Health
