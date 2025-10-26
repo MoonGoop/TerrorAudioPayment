@@ -7,28 +7,57 @@ import os
 from dotenv import load_dotenv
 import json
 
+# -------------------------------------------------------------------
+# Load environment variables
+# -------------------------------------------------------------------
 load_dotenv()
 
+# -------------------------------------------------------------------
 # Configure Stripe
-stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
-stripe_webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-stripe_publishable_key = os.environ["STRIPE_PUBLISHABLE_KEY"]
+# Automatically selects test or live mode based on STRIPE_MODE env var
+# -------------------------------------------------------------------
+STRIPE_MODE = os.getenv("STRIPE_MODE", "test").lower()  # "test" or "live"
 
+if STRIPE_MODE == "live":
+    stripe.api_key = os.getenv("STRIPE_LIVE_SECRET_KEY")
+    stripe_webhook_secret = os.getenv("STRIPE_LIVE_WEBHOOK_SECRET", "")
+    stripe_publishable_key = os.getenv("STRIPE_LIVE_PUBLISHABLE_KEY")
+else:
+    stripe.api_key = os.getenv("STRIPE_TEST_SECRET_KEY")
+    stripe_webhook_secret = os.getenv("STRIPE_TEST_WEBHOOK_SECRET", "")
+    stripe_publishable_key = os.getenv("STRIPE_TEST_PUBLISHABLE_KEY")
+
+print(f"🔐 Stripe mode: {STRIPE_MODE.upper()} | Key prefix: {stripe.api_key[:8]}********")
+
+# -------------------------------------------------------------------
 # Create FastAPI app
+# -------------------------------------------------------------------
 fast_app = FastAPI()
 
+# -------------------------------------------------------------------
 # Add CORS middleware
+# -------------------------------------------------------------------
 fast_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://terroraudio.com", "https://www.terroraudio.com"],
+    allow_origins=[
+        "https://terroraudio.com",
+        "https://www.terroraudio.com"
+    ],
     allow_credentials=True,
     allow_methods=["OPTIONS", "GET", "POST"],
     allow_headers=["*"],
 )
 
+# -------------------------------------------------------------------
+# Define request models
+# -------------------------------------------------------------------
 class CheckoutRequest(BaseModel):
     price_id: str
 
+
+# -------------------------------------------------------------------
+# Stripe Checkout Session endpoint
+# -------------------------------------------------------------------
 @fast_app.post("/create-checkout-session")
 async def create_checkout_session(request: CheckoutRequest):
     try:
@@ -50,6 +79,10 @@ async def create_checkout_session(request: CheckoutRequest):
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
+# -------------------------------------------------------------------
+# Stripe Webhook endpoint
+# -------------------------------------------------------------------
 @fast_app.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -70,15 +103,29 @@ async def stripe_webhook(request: Request):
     # Handle the checkout.session.completed event
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
+        print(f"💰 Payment completed for session: {session.get('id')}")
         await send_download_email(session)
         return {"status": "Email sent"}
     
+    print(f"ℹ️ Received unhandled event type: {event['type']}")
     return {"status": "Event received"}
 
+
+# -------------------------------------------------------------------
+# Root endpoint
+# -------------------------------------------------------------------
 @fast_app.get("/")
 def welcome():
-    return {"message": "Welcome to TerrorAudio"}
+    return {
+        "message": "Welcome to TerrorAudio",
+        "mode": STRIPE_MODE,
+        "publishable_key": stripe_publishable_key[:8] + "********"
+    }
 
+
+# -------------------------------------------------------------------
+# Send download link email using Azure Communication Services
+# -------------------------------------------------------------------
 async def send_download_email(session):
     """Send download link email using Azure Communication Services"""
     try:
@@ -95,7 +142,11 @@ async def send_download_email(session):
         sender_address = os.environ["EMAIL_SENDER_ADDRESS"]
         
         # SAS URL for download - UPDATE THIS WITH ACTUAL LINK
-        DOWNLOAD_LINK = "https://vulturelimiter.blob.core.windows.net/vulturelimiter?sp=r&st=2025-09-11T14:23:42Z&se=2025-09-11T22:38:42Z&spr=https&sv=2024-11-04&sr=c&sig=6%2BXFWUH3cE10sTMIFXvMldpXmz2vuarTeodwEy%2F2MHY%3D"
+        DOWNLOAD_LINK = (
+            "https://vulturelimiter.blob.core.windows.net/vulturelimiter?"
+            "sp=r&st=2025-09-11T14:23:42Z&se=2025-09-11T22:38:42Z&spr=https&"
+            "sv=2024-11-04&sr=c&sig=6%2BXFWUH3cE10sTMIFXvMldpXmz2vuarTeodwEy%2F2MHY%3D"
+        )
         
         email_client = EmailClient.from_connection_string(connection_string)
         
@@ -164,4 +215,8 @@ async def send_download_email(session):
         print(f"Error sending email: {str(e)}")
         raise
 
+
+# -------------------------------------------------------------------
+# Azure Function binding (FastAPI to Azure)
+# -------------------------------------------------------------------
 app = func.AsgiFunctionApp(app=fast_app, http_auth_level=func.AuthLevel.ANONYMOUS)
